@@ -35,16 +35,16 @@ impl Event {
       SDL_EventType::MOUSEMOTION => Some(Self::MouseMove(event.motion.x, event.motion.y)),
       SDL_EventType::MOUSEWHEEL => Some(Self::MouseWheel(event.wheel.x, event.wheel.y)),
       SDL_EventType::FINGERDOWN => Some(Self::TouchDown(
-        event.tfinger.x.round() as i32,
-        event.tfinger.y.round() as i32,
+        event.tfinger.x as i32,
+        event.tfinger.y as i32,
       )),
       SDL_EventType::FINGERUP => Some(Self::TouchUp(
-        event.tfinger.x.round() as i32,
-        event.tfinger.y.round() as i32,
+        event.tfinger.x as i32,
+        event.tfinger.y as i32,
       )),
       SDL_EventType::FINGERMOTION => Some(Self::TouchMove(
-        event.tfinger.x.round() as i32,
-        event.tfinger.y.round() as i32,
+        event.tfinger.x as i32,
+        event.tfinger.y as i32,
       )),
       _ => None,
     }

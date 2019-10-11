@@ -29,8 +29,8 @@ fn nibble(opcode: u16, index: u8) -> u8 {
 pub struct Instruction<'a> {
   pub code: u16,
   pub mask: u16,
-  pub name: &'static str,
-  pub desc: &'static str,
+  pub name: &'a str,
+  pub desc: &'a str,
   pub f: &'a Fn(u16, &mut Chip8),
 }
 
@@ -389,8 +389,9 @@ const INSTRUCTIONS: &'static [Instruction] = &[
     desc: "Skip next instruction if key with the value of Vx is pressed.",
     f: &|opcode, chip8| {
       let vx: u8 = nibble(opcode, 2);
+      let rx: u8 = chip8.reg_v[vx as usize];
 
-      if chip8.key_pressed(vx) {
+      if chip8.key_pressed(rx) {
         chip8.next();
       }
 
@@ -404,8 +405,9 @@ const INSTRUCTIONS: &'static [Instruction] = &[
     desc: "Skip next instruction if key with the value of Vx is not pressed.",
     f: &|opcode, chip8| {
       let vx: u8 = nibble(opcode, 2);
+      let rx: u8 = chip8.reg_v[vx as usize];
 
-      if !chip8.key_pressed(vx) {
+      if !chip8.key_pressed(rx) {
         chip8.next();
       }
 

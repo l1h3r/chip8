@@ -156,6 +156,12 @@ pub struct SDL_Texture {
   _unused: [u8; 0],
 }
 
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct SDL_BlitMap {
+  pub _address: u8,
+}
+
 #[derive(Clone, Copy, Debug)]
 #[repr(C)]
 pub struct SDL_Rect {
@@ -163,6 +169,65 @@ pub struct SDL_Rect {
   pub y: i32,
   pub w: i32,
   pub h: i32,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct SDL_Surface {
+  pub flags: u32,
+  pub format: *mut SDL_PixelFormat,
+  pub w: i32,
+  pub h: i32,
+  pub pitch: i32,
+  pub pixels: *mut c_void,
+  pub userdata: *mut c_void,
+  pub locked: i32,
+  pub lock_data: *mut c_void,
+  pub clip_rect: SDL_Rect,
+  pub map: *mut SDL_BlitMap,
+  pub refcount: i32,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct SDL_PixelFormat {
+  pub format: u32,
+  pub palette: *mut SDL_Palette,
+  pub BitsPerPixel: u8,
+  pub BytesPerPixel: u8,
+  pub padding: [u8; 2],
+  pub Rmask: u32,
+  pub Gmask: u32,
+  pub Bmask: u32,
+  pub Amask: u32,
+  pub Rloss: u8,
+  pub Gloss: u8,
+  pub Bloss: u8,
+  pub Aloss: u8,
+  pub Rshift: u8,
+  pub Gshift: u8,
+  pub Bshift: u8,
+  pub Ashift: u8,
+  pub refcount: i32,
+  pub next: *mut SDL_PixelFormat,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct SDL_Palette {
+  pub ncolors: i32,
+  pub colors: *mut SDL_Color,
+  pub version: u32,
+  pub refcount: i32,
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct SDL_Color {
+  pub r: u8,
+  pub g: u8,
+  pub b: u8,
+  pub a: u8,
 }
 
 #[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
@@ -1141,6 +1206,41 @@ pub struct SDL_AudioSpec {
   pub userdata: *mut c_void,
 }
 
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct SDL_RWops {
+  pub size: Option<unsafe extern "C" fn(context: *mut SDL_RWops) -> i64>,
+  pub seek: Option<unsafe extern "C" fn(context: *mut SDL_RWops, offset: i64, whence: i32) -> i64>,
+  pub read: Option<unsafe extern "C" fn(context: *mut SDL_RWops, ptr: *mut c_void, size: usize, maxnum: usize) -> usize>,
+  pub write: Option<unsafe extern "C" fn(context: *mut SDL_RWops, ptr: *const c_void, size: usize, num: usize) -> usize>,
+  pub close: Option<unsafe extern "C" fn(context: *mut SDL_RWops) -> i32>,
+  pub type_: u32,
+  pub hidden: __SDL_RWops,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub union __SDL_RWops {
+  pub mem: __SDL_RWops_mem,
+  pub unknown: __SDL_RWops_unknown,
+  _union_align: [u64; 3],
+}
+
+#[derive(Clone, Copy, Debug)]
+#[repr(C)]
+pub struct __SDL_RWops_mem {
+  pub base: *mut u8,
+  pub here: *mut u8,
+  pub stop: *mut u8,
+}
+
+#[derive(Clone, Copy)]
+#[repr(C)]
+pub struct __SDL_RWops_unknown {
+  pub data1: *mut c_void,
+  pub data2: *mut c_void,
+}
+
 #[link(name = "SDL2")]
 extern "C" {
   // ===========================================================================
@@ -1201,6 +1301,42 @@ extern "C" {
   pub fn SDL_RenderFillRect(renderer: *mut SDL_Renderer, rect: *const SDL_Rect) -> i32;
 
   pub fn SDL_RenderClear(renderer: *mut SDL_Renderer) -> i32;
+
+  pub fn SDL_RenderCopy(
+    renderer: *mut SDL_Renderer,
+    texture: *mut SDL_Texture,
+    srcrect: *const SDL_Rect,
+    dstrect: *const SDL_Rect,
+  ) -> i32;
+
+  pub fn SDL_RenderDrawLine(renderer: *mut SDL_Renderer, x1: i32, y1: i32, x2: i32, y2: i32) -> i32;
+
+  pub fn SDL_CreateTexture(
+    renderer: *mut SDL_Renderer,
+    format: u32,
+    access: i32,
+    w: i32,
+    h: i32,
+  ) -> *mut SDL_Texture;
+
+  pub fn SDL_CreateTextureFromSurface(
+    renderer: *mut SDL_Renderer,
+    surface: *mut SDL_Surface,
+  ) -> *mut SDL_Texture;
+
+  pub fn SDL_DestroyTexture(texture: *mut SDL_Texture);
+
+  pub fn SDL_FreeSurface(surface: *mut SDL_Surface);
+
+  pub fn SDL_LoadBMP_RW(src: *mut SDL_RWops, freesrc: i32) -> *mut SDL_Surface;
+
+  pub fn SDL_RWFromFile(file: *const i8, mode: *const i8) -> *mut SDL_RWops;
+
+  pub fn SDL_RWFromConstMem(mem: *const c_void, size: i32) -> *mut SDL_RWops;
+
+  pub fn SDL_MapRGB(format: *const SDL_PixelFormat, r: u8, g: u8, b: u8) -> u32;
+
+  pub fn SDL_SetColorKey(surface: *mut SDL_Surface, flag: i32, key: u32) -> i32;
 
   // ===========================================================================
   // Error Handling
