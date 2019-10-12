@@ -1,8 +1,8 @@
 use core::marker::PhantomData;
 
-use crate::sdl2::SDL_Texture;
-use crate::sdl2::SDL_DestroyTexture;
 use crate::sdl2::Renderer;
+use crate::sdl2::SDL_DestroyTexture;
+use crate::sdl2::SDL_Texture;
 
 #[derive(Debug)]
 #[repr(transparent)]

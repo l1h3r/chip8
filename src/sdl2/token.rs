@@ -1,14 +1,20 @@
 use core::marker::PhantomData;
+use core::ptr::null;
+use core::ptr::null_mut;
 use core::sync::atomic::AtomicBool;
 use core::sync::atomic::Ordering;
 
 use crate::sdl2::error;
+use crate::sdl2::AudioDevice;
 use crate::sdl2::Event;
+use crate::sdl2::SDL_AudioSpec;
 use crate::sdl2::SDL_CreateWindow;
 use crate::sdl2::SDL_Delay;
 use crate::sdl2::SDL_Event;
+use crate::sdl2::SDL_GetNumAudioDevices;
 use crate::sdl2::SDL_GetTicks;
 use crate::sdl2::SDL_Init;
+use crate::sdl2::SDL_OpenAudioDevice;
 use crate::sdl2::SDL_PollEvent;
 use crate::sdl2::SDL_Quit;
 use crate::sdl2::SDL_Window;
@@ -53,6 +59,36 @@ impl SDLToken {
       Err(error())
     } else {
       Ok(Window::new(window))
+    }
+  }
+
+  pub fn open_audio_device(&self, mut spec: SDL_AudioSpec) -> Result<AudioDevice, &'static str> {
+    unsafe {
+      if SDL_GetNumAudioDevices(0) == 0 {
+        Err("No Audio Device Available")?
+      }
+    }
+
+    let mut obtained: SDL_AudioSpec = SDL_AudioSpec {
+      freq: 0,
+      format: 0,
+      channels: 0,
+      silence: 0,
+      samples: 0,
+      padding: 0,
+      size: 0,
+      callback: None,
+      userdata: null_mut(),
+    };
+
+    let device: u32 = unsafe { SDL_OpenAudioDevice(null(), 0, &mut spec, &mut obtained, 0) };
+
+    if device == 0 {
+      Err(error())
+    } else if spec.format != obtained.format {
+      Err(error())
+    } else {
+      Ok(AudioDevice::new(device))
     }
   }
 

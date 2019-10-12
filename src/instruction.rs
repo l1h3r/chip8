@@ -431,8 +431,11 @@ const INSTRUCTIONS: &'static [Instruction] = &[
     mask: 0xF0FF,
     name: "Fx0A - LD Vx, K",
     desc: "Wait for a key press, store the value of the key in Vx.",
-    f: &|_opcode, _chip8| {
-      panic!("TODO: Fx0A");
+    f: &|opcode, chip8| {
+      let vx: u8 = nibble(opcode, 2);
+
+      chip8.wait = &mut chip8.reg_v[vx as usize];
+      chip8.next();
     },
   },
   Instruction {

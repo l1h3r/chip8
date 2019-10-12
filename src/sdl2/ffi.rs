@@ -1211,8 +1211,22 @@ pub struct SDL_AudioSpec {
 pub struct SDL_RWops {
   pub size: Option<unsafe extern "C" fn(context: *mut SDL_RWops) -> i64>,
   pub seek: Option<unsafe extern "C" fn(context: *mut SDL_RWops, offset: i64, whence: i32) -> i64>,
-  pub read: Option<unsafe extern "C" fn(context: *mut SDL_RWops, ptr: *mut c_void, size: usize, maxnum: usize) -> usize>,
-  pub write: Option<unsafe extern "C" fn(context: *mut SDL_RWops, ptr: *const c_void, size: usize, num: usize) -> usize>,
+  pub read: Option<
+    unsafe extern "C" fn(
+      context: *mut SDL_RWops,
+      ptr: *mut c_void,
+      size: usize,
+      maxnum: usize,
+    ) -> usize,
+  >,
+  pub write: Option<
+    unsafe extern "C" fn(
+      context: *mut SDL_RWops,
+      ptr: *const c_void,
+      size: usize,
+      num: usize,
+    ) -> usize,
+  >,
   pub close: Option<unsafe extern "C" fn(context: *mut SDL_RWops) -> i32>,
   pub type_: u32,
   pub hidden: __SDL_RWops,
@@ -1309,7 +1323,8 @@ extern "C" {
     dstrect: *const SDL_Rect,
   ) -> i32;
 
-  pub fn SDL_RenderDrawLine(renderer: *mut SDL_Renderer, x1: i32, y1: i32, x2: i32, y2: i32) -> i32;
+  pub fn SDL_RenderDrawLine(renderer: *mut SDL_Renderer, x1: i32, y1: i32, x2: i32, y2: i32)
+    -> i32;
 
   pub fn SDL_CreateTexture(
     renderer: *mut SDL_Renderer,
@@ -1367,6 +1382,10 @@ extern "C" {
   pub fn SDL_CloseAudioDevice(device: SDL_AudioDeviceID);
 
   pub fn SDL_PauseAudioDevice(device: SDL_AudioDeviceID, pause_on: i32);
+
+  pub fn SDL_QueueAudio(device: SDL_AudioDeviceID, data: *const c_void, len: u32) -> i32;
+
+  pub fn SDL_GetNumAudioDevices(iscapture: i32) -> i32;
 
   // ===========================================================================
   // ???
