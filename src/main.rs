@@ -13,17 +13,15 @@ use crate::chip8::Chip8;
 use crate::chip8::Mode;
 use crate::chip8::H;
 use crate::chip8::W;
-use crate::sdl2::AudioDevice;
+use crate::sdl2::AudioBell;
 use crate::sdl2::Renderer;
 use crate::sdl2::RendererFlags;
 use crate::sdl2::SDLToken;
-use crate::sdl2::SDL_AudioSpec;
 use crate::sdl2::SDL_Context;
 use crate::sdl2::Surface;
 use crate::sdl2::Texture;
 use crate::sdl2::Window;
 use crate::sdl2::WindowFlags;
-use crate::sdl2::AUDIO_S16SYS;
 
 static FONT_BMP: &'static [u8] = include_bytes!("font.bmp");
 
@@ -51,18 +49,7 @@ fn main() -> Result<(), &'static str> {
   surface.set_color(255, 0, 255);
 
   let texture: Texture = renderer.create_texture_from_surface(surface)?;
-
-  let audio: AudioDevice = token.open_audio_device(SDL_AudioSpec {
-    freq: AudioDevice::FREQUENCY,
-    format: AUDIO_S16SYS as u16,
-    channels: AudioDevice::CHANNELS,
-    silence: 0,
-    samples: AudioDevice::SAMPLES,
-    padding: 0,
-    size: 0,
-    callback: None,
-    userdata: 0 as *mut _,
-  })?;
+  let audio: AudioBell = AudioBell::new(&token)?;
 
   let context = SDL_Context {
     token: &token,
@@ -74,7 +61,7 @@ fn main() -> Result<(), &'static str> {
   let mut interpreter: Chip8 = Chip8::new();
 
   interpreter.mode = Mode::CHIP;
-  interpreter.load("roms/CHIP/PONG");
+  interpreter.load_vip("roms/CHIP/PONG");
   interpreter.start(&context);
 
   Ok(())

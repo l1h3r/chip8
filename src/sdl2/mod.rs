@@ -9,6 +9,7 @@
 mod macros;
 
 mod audio;
+mod bell;
 mod context;
 mod event;
 mod ffi;
@@ -21,6 +22,7 @@ mod util;
 mod window;
 
 pub use self::audio::*;
+pub use self::bell::*;
 pub use self::context::*;
 pub use self::event::*;
 pub use self::ffi::*;

@@ -50,7 +50,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
     desc: "Clear the display.",
     f: &|_opcode, chip8| {
       chip8.clear();
-      chip8.next();
     },
   },
   Instruction {
@@ -61,7 +60,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
     f: &|_opcode, chip8| {
       chip8.sp -= 1;
       chip8.pc = chip8.stack[chip8.sp as usize];
-      chip8.next();
     },
   },
   Instruction {
@@ -96,8 +94,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       if chip8.reg_v[vx as usize] == nn {
         chip8.next();
       }
-
-      chip8.next();
     },
   },
   Instruction {
@@ -112,8 +108,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       if chip8.reg_v[vx as usize] != nn {
         chip8.next();
       }
-
-      chip8.next();
     },
   },
   Instruction {
@@ -128,8 +122,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       if chip8.reg_v[vx as usize] == chip8.reg_v[vy as usize] {
         chip8.next();
       }
-
-      chip8.next();
     },
   },
   Instruction {
@@ -142,7 +134,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let nn: u8 = byte(opcode, 0);
 
       chip8.reg_v[vx as usize] = nn;
-      chip8.next();
     },
   },
   Instruction {
@@ -155,7 +146,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let nn: u8 = byte(opcode, 0);
 
       chip8.reg_v[vx as usize] = chip8.reg_v[vx as usize].wrapping_add(nn);
-      chip8.next();
     },
   },
   Instruction {
@@ -168,7 +158,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let vy: u8 = nibble(opcode, 1);
 
       chip8.reg_v[vx as usize] = chip8.reg_v[vy as usize];
-      chip8.next();
     },
   },
   Instruction {
@@ -181,7 +170,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let vy: u8 = nibble(opcode, 1);
 
       chip8.reg_v[vx as usize] |= chip8.reg_v[vy as usize];
-      chip8.next();
     },
   },
   Instruction {
@@ -194,7 +182,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let vy: u8 = nibble(opcode, 1);
 
       chip8.reg_v[vx as usize] &= chip8.reg_v[vy as usize];
-      chip8.next();
     },
   },
   Instruction {
@@ -207,7 +194,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let vy: u8 = nibble(opcode, 1);
 
       chip8.reg_v[vx as usize] ^= chip8.reg_v[vy as usize];
-      chip8.next();
     },
   },
   Instruction {
@@ -229,8 +215,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
           chip8.reg_v[VF] = 0x0;
         }
       }
-
-      chip8.next();
     },
   },
   Instruction {
@@ -252,8 +236,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
           chip8.reg_v[VF] = 0x1;
         }
       }
-
-      chip8.next();
     },
   },
   Instruction {
@@ -273,7 +255,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
 
       chip8.reg_v[VF] = source & 0x1;
       chip8.reg_v[vx as usize] = source >> 0x1;
-      chip8.next();
     },
   },
   Instruction {
@@ -295,8 +276,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
           chip8.reg_v[VF] = 0x1;
         }
       }
-
-      chip8.next();
     },
   },
   Instruction {
@@ -314,10 +293,8 @@ const INSTRUCTIONS: &'static [Instruction] = &[
         chip8.reg_v[vy as usize]
       };
 
-      // chip8.reg_v[VF] = source & 0x80;
       chip8.reg_v[VF] = source >> 7;
       chip8.reg_v[vx as usize] = source << 0x1;
-      chip8.next();
     },
   },
   Instruction {
@@ -332,8 +309,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       if chip8.reg_v[vx as usize] != chip8.reg_v[vy as usize] {
         chip8.next();
       }
-
-      chip8.next();
     },
   },
   Instruction {
@@ -343,7 +318,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
     desc: "Set I = nnn.",
     f: &|opcode, chip8| {
       chip8.reg_i = address(opcode);
-      chip8.next();
     },
   },
   Instruction {
@@ -365,7 +339,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let nn: u8 = byte(opcode, 0);
 
       chip8.reg_v[vx as usize] = chip8.rand() & nn;
-      chip8.next();
     },
   },
   Instruction {
@@ -379,7 +352,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let n: usize = nibble(opcode, 0) as usize;
 
       chip8.draw(x, y, n);
-      chip8.next();
     },
   },
   Instruction {
@@ -394,8 +366,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       if chip8.key_pressed(rx) {
         chip8.next();
       }
-
-      chip8.next();
     },
   },
   Instruction {
@@ -410,8 +380,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       if !chip8.key_pressed(rx) {
         chip8.next();
       }
-
-      chip8.next();
     },
   },
   Instruction {
@@ -423,7 +391,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let vx: u8 = nibble(opcode, 2);
 
       chip8.reg_v[vx as usize] = chip8.delay;
-      chip8.next();
     },
   },
   Instruction {
@@ -435,7 +402,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let vx: u8 = nibble(opcode, 2);
 
       chip8.wait = &mut chip8.reg_v[vx as usize];
-      chip8.next();
     },
   },
   Instruction {
@@ -447,7 +413,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let vx: u8 = nibble(opcode, 2);
 
       chip8.delay = chip8.reg_v[vx as usize];
-      chip8.next();
     },
   },
   Instruction {
@@ -464,7 +429,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       // setting the timer to a value of 01 would have no audible effect.
 
       chip8.sound = chip8.reg_v[vx as usize];
-      chip8.next();
     },
   },
   Instruction {
@@ -476,7 +440,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let vx: u8 = nibble(opcode, 2);
 
       chip8.reg_i = chip8.reg_i.wrapping_add(chip8.reg_v[vx as usize] as u16);
-      chip8.next();
     },
   },
   Instruction {
@@ -488,7 +451,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let vx: u8 = nibble(opcode, 2);
 
       chip8.reg_i = FONT_BASE as u16 + chip8.reg_v[vx as usize] as u16 * 5;
-      chip8.next();
     },
   },
   Instruction {
@@ -503,8 +465,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       chip8.memory[chip8.reg_i as usize] = rx / 100;
       chip8.memory[chip8.reg_i as usize + 1] = (rx / 10) % 10;
       chip8.memory[chip8.reg_i as usize + 2] = (rx % 100) % 10;
-
-      chip8.next();
     },
   },
   Instruction {
@@ -519,7 +479,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let source: Range<usize> = 0..vx as usize + 1;
 
       chip8.memory[output].copy_from_slice(&chip8.reg_v[source]);
-      chip8.next();
     },
   },
   Instruction {
@@ -534,7 +493,6 @@ const INSTRUCTIONS: &'static [Instruction] = &[
       let source: Range<usize> = (chip8.reg_i as usize)..(chip8.reg_i + vx as u16 + 1) as usize;
 
       chip8.reg_v[output].clone_from_slice(&chip8.memory[source]);
-      chip8.next();
     },
   },
 ];

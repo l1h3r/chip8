@@ -1387,6 +1387,8 @@ extern "C" {
 
   pub fn SDL_GetNumAudioDevices(iscapture: i32) -> i32;
 
+  pub fn SDL_GetQueuedAudioSize(device: SDL_AudioDeviceID) -> u32;
+
   // ===========================================================================
   // ???
   // ===========================================================================

@@ -20,10 +20,14 @@ pub const STACK: usize = 0x10;
 pub const RAM: usize = 0xFFF;
 
 pub const FONT_BASE: usize = 0x050;
-pub const PROG_BASE: usize = 0x200;
+pub const PROG_BASE_VIP: usize = 0x200; // COSMAC VIP
+pub const PROG_BASE_ETI: usize = 0x200; // ETI 660
 
 pub const VF: usize = REGISTERS - 0x1;
 
+// TODO: Support 64x48 size (ETI 660)
+// TODO: Support 64x64 size (ETI 660)
+// TODO: Support 128x64 size (CHIP-48)
 pub const W: usize = 0x40;
 pub const H: usize = 0x20;
 
@@ -33,6 +37,7 @@ pub const CH: i32 = 7; // debug font char height
 pub const MAX_SPEED: u64 = 15000;
 pub const MIN_SPEED: u64 = 100;
 pub const INCR_SPEED: u64 = 200;
+pub const DEFAULT_SPEED: u64 = 700;
 
 static FONT: [u8; 0x50] = [
   0xF0, 0x90, 0x90, 0x90, 0xF0, // 0
@@ -70,12 +75,12 @@ macro_rules! blankify {
 
 #[repr(C)]
 pub struct Chip8 {
-  pub delay: u8,              // delay timer
-  pub sound: u8,              // sound timer
-  pub pc: u16,                // program counter
-  pub sp: u8,                 // stack pointer
-  pub reg_i: u16,             // register I
-  pub reg_v: [u8; REGISTERS], // registers V0-VF
+  pub delay: u8,              // delay timer - decremented at a rate of 60Hz
+  pub sound: u8,              // sound timer - decremented at a rate of 60Hz
+  pub pc: u16,                // program counter - stores the currently executing address
+  pub sp: u8,                 // stack pointer - points to the topmost level of the stack
+  pub reg_i: u16,             // register I - generally used to store memory addresses
+  pub reg_v: [u8; REGISTERS], // registers V0-VF - general purpose registers
   pub stack: [u16; STACK],    // stack (should actually be part memory)
   pub display: [u8; W * H],   // display buffer
   pub memory: [u8; RAM],      // memory buffer
@@ -113,7 +118,7 @@ impl Chip8 {
       wait: null_mut(),
 
       cycles: 0,
-      speed: 700,
+      speed: DEFAULT_SPEED,
       time: 0,
 
       mode: Mode::CHIP,
@@ -205,7 +210,20 @@ impl Chip8 {
     self.render = true;
   }
 
-  pub fn reset(&mut self) {
+  #[inline]
+  pub fn load_vip(&mut self, path: &str) {
+    self.load(path, false)
+  }
+
+  #[inline]
+  pub fn load_eti(&mut self, path: &str) {
+    self.load(path, true)
+  }
+
+  // TODO: Propagate errors
+  pub fn load(&mut self, path: &str, eti: bool) {
+    let base: usize = if eti { PROG_BASE_ETI } else { PROG_BASE_VIP };
+
     blankify!(self.reg_v.iter_mut());
     blankify!(self.stack.iter_mut());
     blankify!(self.display.iter_mut());
@@ -213,7 +231,7 @@ impl Chip8 {
 
     self.delay = 0;
     self.sound = 0;
-    self.pc = PROG_BASE as u16;
+    self.pc = base as u16;
     self.sp = 0;
     self.reg_i = 0;
     self.reg_v = [0; REGISTERS];
@@ -226,15 +244,10 @@ impl Chip8 {
     self.cycles = 0;
     self.time = time();
 
-    self.load_font(&FONT);
-  }
-
-  // TODO: Propagate errors
-  pub fn load(&mut self, path: &str) {
-    self.reset();
+    self.load_memory(FONT_BASE, &FONT);
 
     if let Ok(buffer) = read(path) {
-      self.load_data(&buffer);
+      self.load_memory(base, &buffer);
     }
   }
 
@@ -273,7 +286,10 @@ impl Chip8 {
 
   fn step(&mut self, context: &SDL_Context) {
     if self.wait.is_null() {
-      self.exec(word(&self.memory, self.pc));
+      let opcode: u16 = word(&self.memory, self.pc);
+
+      self.next();
+      self.exec(opcode);
       self.tick_delay();
       self.tick_sound(context);
     }
@@ -348,10 +364,10 @@ impl Chip8 {
   fn tick_sound(&mut self, context: &SDL_Context) {
     if self.sound > 0 {
       self.sound -= 1;
+    }
 
-      if self.sound == 0 {
-        context.audio.beep();
-      }
+    if self.sound != 0 {
+      context.audio.beep();
     }
   }
 
@@ -476,14 +492,8 @@ impl Chip8 {
     }
   }
 
-  #[inline]
-  fn load_font(&mut self, font: &[u8]) {
-    self.memory[FONT_BASE..FONT_BASE + font.len()].copy_from_slice(font);
-  }
-
-  #[inline]
-  fn load_data(&mut self, data: &[u8]) {
-    self.memory[PROG_BASE..PROG_BASE + data.len()].copy_from_slice(data);
+  fn load_memory(&mut self, address: usize, data: &[u8]) {
+    self.memory[address..address + data.len()].copy_from_slice(data);
   }
 }
 
@@ -505,4 +515,11 @@ impl Debug for Chip8 {
 
 fn word(memory: &[u8], address: u16) -> u16 {
   (memory[address as usize] as u16) << 8 | (memory[(address + 1) as usize] as u16)
+}
+
+fn time() -> u64 {
+  match SystemTime::now().duration_since(UNIX_EPOCH) {
+    Ok(duration) => duration.as_nanos() as u64,
+    Err(_) => 0,
+  }
 }
