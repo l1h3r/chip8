@@ -6,13 +6,12 @@ extern crate bitflags;
 extern crate libc;
 
 mod chip8;
-mod instruction;
+mod runner;
 mod sdl2;
 
-use crate::chip8::Chip8;
-use crate::chip8::Mode;
-use crate::chip8::H;
-use crate::chip8::W;
+use std::env::args;
+
+use crate::runner::ChipRunner;
 use crate::sdl2::AudioBell;
 use crate::sdl2::Renderer;
 use crate::sdl2::RendererFlags;
@@ -25,18 +24,41 @@ use crate::sdl2::WindowFlags;
 
 static FONT_BMP: &'static [u8] = include_bytes!("font.bmp");
 
-const WW: i32 = (W as i32 * 10) + 320 + 20;
-const WH: i32 = (H as i32 * 10) + 320 + 20;
+#[derive(Debug)]
+#[repr(C)]
+pub struct Args {
+  pub eti: bool,
+  pub rom: String,
+}
+
+impl Args {
+  pub fn from_env() -> Self {
+    let mut data: Self = Self {
+      eti: false,
+      rom: String::new(),
+    };
+
+    for arg in args() {
+      match arg.as_str() {
+        "--eti" => data.eti = true,
+        _ => data.rom = arg,
+      }
+    }
+
+    data
+  }
+}
 
 fn main() -> Result<(), &'static str> {
+  let args: Args = Args::from_env();
   let token: SDLToken = SDLToken::init()?;
 
   let window: Window = token.create_window(
     "Chip-8\0",
     Window::CENTERED_MASK,
     Window::CENTERED_MASK,
-    WW,
-    WH,
+    ChipRunner::W,
+    ChipRunner::H,
     WindowFlags::OPENGL,
   )?;
 
@@ -58,11 +80,10 @@ fn main() -> Result<(), &'static str> {
     audio: &audio,
   };
 
-  let mut interpreter: Chip8 = Chip8::new();
+  let mut runner: ChipRunner = ChipRunner::new();
 
-  interpreter.mode = Mode::CHIP;
-  interpreter.load_vip("roms/CHIP/PONG");
-  interpreter.start(&context);
+  runner.load(&args.rom, args.eti)?;
+  runner.run(&context);
 
   Ok(())
 }
