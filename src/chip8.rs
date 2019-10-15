@@ -1,9 +1,12 @@
+use core::ops::RangeFrom;
 use core::ops::RangeInclusive;
+use core::ops::RangeTo;
 use core::ops::RangeToInclusive;
 use core::ptr::null_mut;
 use std::fs::read;
 
 const REGISTERS: usize = 0x10;
+const UFLAGS: usize = 0x8;
 const STACK: usize = 0x10;
 const RAM: usize = 0xFFF;
 const VF: usize = REGISTERS - 0x1;
@@ -30,53 +33,37 @@ const FONT: [u8; 5 * 16] = [
   0xF0, 0x80, 0xF0, 0x80, 0x80, // F
 ];
 
+const XFONT: [u8; 10 * 10] = [
+  0x00, 0xFF, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0x81, 0xFF, // 0
+  0x00, 0x08, 0x18, 0x28, 0x48, 0x08, 0x08, 0x08, 0x08, 0x7F, // 1
+  0x00, 0xFF, 0x01, 0x01, 0x01, 0xFF, 0x80, 0x80, 0x80, 0xFF, // 2
+  0x00, 0xFF, 0x01, 0x01, 0x01, 0xFF, 0x01, 0x01, 0x01, 0xFF, // 3
+  0x00, 0x81, 0x81, 0x81, 0x81, 0xFF, 0x01, 0x01, 0x01, 0x0F, // 4
+  0x00, 0xFF, 0x80, 0x80, 0x80, 0xFF, 0x01, 0x01, 0x01, 0xFF, // 5
+  0x00, 0xFF, 0x80, 0x80, 0x80, 0xFF, 0x81, 0x81, 0x81, 0xFF, // 6
+  0x00, 0xFF, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, 0x01, // 7
+  0x00, 0xFF, 0x81, 0x81, 0x81, 0xFF, 0x81, 0x81, 0x81, 0xFF, // 8
+  0x00, 0xFF, 0x81, 0x81, 0x81, 0xFF, 0x01, 0x01, 0x01, 0xFF, // 9
+];
+
 fn rand() -> u8 {
   unsafe { (libc::rand() as f32 / libc::RAND_MAX as f32 * 255.0) as u8 }
 }
 
-macro_rules! blankify {
-  ($array:expr) => {
-    for byte in $array {
-      *byte = 0;
-    }
-  };
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Mode {
+  CHIP,  // CHIP-8
+  SCHIP, // CHIP-48
 }
 
-macro_rules! x {
-  ($opcode:expr) => {
-    (($opcode >> 8) & 0x0F) as u8
-  };
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq)]
+#[repr(u8)]
+pub enum Pitch {
+  P8 = 8,
+  P16 = 16,
 }
 
-macro_rules! y {
-  ($opcode:expr) => {
-    (($opcode >> 4) & 0x0F) as u8
-  };
-}
-
-macro_rules! n {
-  ($opcode:expr) => {
-    ($opcode & 0x0F) as u8
-  };
-}
-
-macro_rules! kk {
-  ($opcode:expr) => {
-    ($opcode & 0xFF) as u8
-  };
-}
-
-macro_rules! nnn {
-  ($opcode:expr) => {
-    $opcode & 0x0FFF
-  };
-}
-
-// TODO: Support 64x48 size (ETI 660)
-// TODO: Support 64x64 size (ETI 660)
-// TODO: Support 128x64 size (CHIP-48)
-// TODO: Support shr_vx_vy/shl_vx_vy quirks
-// TODO: Support ld_i_vx/ld_vx_i quirks
 #[repr(C)]
 pub struct Chip8 {
   pub(crate) delay: u8,              // delay timer - decremented at a rate of 60Hz
@@ -85,17 +72,20 @@ pub struct Chip8 {
   pub(crate) sp: u8,                 // stack pointer - points to the topmost level of the stack
   pub(crate) reg_i: u16,             // register I - generally used to store memory addresses
   pub(crate) reg_v: [u8; REGISTERS], // registers V0-VF - general purpose registers
+  pub(crate) reg_u: [u8; UFLAGS],    // registers R0-RF - user-flag registers
   pub(crate) stack: [u16; STACK],    // stack values
   pub(crate) display: [u8; Chip8::W * Chip8::H], // display buffer
   pub(crate) memory: [u8; RAM],      // memory buffer
   pub(crate) keys: u16,              // keypad state
   pub(crate) wait: *mut u8,          // pointer to register awaiting keypress
   pub(crate) render: bool,           // flag set if interpreter requires rendering
+  pub(crate) pitch: Pitch,
+  pub(crate) mode: Mode,
 }
 
 impl Chip8 {
-  pub const W: usize = 0x40;
-  pub const H: usize = 0x20;
+  pub const W: usize = 0x80;
+  pub const H: usize = 0x40;
 
   pub fn new() -> Self {
     unsafe {
@@ -109,19 +99,33 @@ impl Chip8 {
       sp: 0,
       reg_i: 0,
       reg_v: [0; REGISTERS],
+      reg_u: [0; UFLAGS],
       stack: [0; STACK],
       display: [0; Chip8::W * Chip8::H],
       memory: [0; RAM],
       keys: 0,
       wait: null_mut(),
       render: false,
+      pitch: Pitch::P8,
+      mode: Mode::CHIP,
     }
+  }
+
+  #[inline(always)]
+  pub fn mode(&mut self, mode: Mode) {
+    self.mode = mode;
+  }
+
+  #[inline(always)]
+  pub fn is_mode(&self, mode: Mode) -> bool {
+    self.mode == mode
   }
 
   pub fn load(&mut self, path: &str, eti: bool) -> Result<(), &'static str> {
     self.reset(eti);
 
     self.write(0, &FONT);
+    self.write(FONT.len(), &XFONT);
 
     read(path)
       .map(|buffer| self.write(Self::base(eti), &buffer))
@@ -155,49 +159,102 @@ impl Chip8 {
   }
 
   pub fn exec(&mut self, opcode: u16) {
-    match opcode & 0xFFFF {
-      0x00E0 => self.cls(),
-      0x00EE => self.ret(),
-      _ => match opcode & 0xF000 {
-        0x0000 => self.sys_addr(nnn!(opcode)),
-        0x1000 => self.jp_addr(nnn!(opcode)),
-        0x2000 => self.call_addr(nnn!(opcode)),
-        0x3000 => self.se_vx_byte(x!(opcode), kk!(opcode)),
-        0x4000 => self.sne_vx_byte(x!(opcode), kk!(opcode)),
-        0x6000 => self.ld_vx_byte(x!(opcode), kk!(opcode)),
-        0x7000 => self.add_vx_byte(x!(opcode), kk!(opcode)),
-        0xA000 => self.ld_i_addr(nnn!(opcode)),
-        0xB000 => self.jp_v0_addr(nnn!(opcode)),
-        0xC000 => self.rnd_vx_byte(x!(opcode), kk!(opcode)),
-        0xD000 => self.drw_vx_vy_nibble(x!(opcode), y!(opcode), n!(opcode)),
-        _ => match opcode & 0xF00F {
-          0x5000 => self.se_vx_vy(x!(opcode), y!(opcode)),
-          0x8000 => self.ld_vx_vy(x!(opcode), y!(opcode)),
-          0x8001 => self.or_vx_vy(x!(opcode), y!(opcode)),
-          0x8002 => self.and_vx_vy(x!(opcode), y!(opcode)),
-          0x8003 => self.xor_vx_vy(x!(opcode), y!(opcode)),
-          0x8004 => self.add_vx_vy(x!(opcode), y!(opcode)),
-          0x8005 => self.sub_vx_vy(x!(opcode), y!(opcode)),
-          0x8006 => self.shr_vx_vy(x!(opcode), y!(opcode)),
-          0x8007 => self.subn_vx_vy(x!(opcode), y!(opcode)),
-          0x800E => self.shl_vx_vy(x!(opcode), y!(opcode)),
-          0x9000 => self.sne_vx_vy(x!(opcode), y!(opcode)),
-          _ => match opcode & 0xF0FF {
-            0xE09E => self.skp_vx(x!(opcode)),
-            0xE0A1 => self.sknp_vx(x!(opcode)),
-            0xF007 => self.ld_vx_dt(x!(opcode)),
-            0xF00A => self.ld_vx_k(x!(opcode)),
-            0xF015 => self.ld_dt_vx(x!(opcode)),
-            0xF018 => self.ld_st_vx(x!(opcode)),
-            0xF01E => self.add_i_vx(x!(opcode)),
-            0xF029 => self.ld_f_vx(x!(opcode)),
-            0xF033 => self.ld_b_vx(x!(opcode)),
-            0xF055 => self.ld_i_vx(x!(opcode)),
-            0xF065 => self.ld_vx_i(x!(opcode)),
-            _ => panic!("Unexpected Opcode: {:#06X}", opcode),
-          },
-        },
-      },
+    let schip: bool = self.is_mode(Mode::SCHIP);
+
+    if opcode == 0x00E0 {
+      self.cls();
+    } else if opcode == 0x00EE {
+      self.ret();
+    } else if opcode == 0x00FB && schip {
+      self.scr();
+    } else if opcode == 0x00FC && schip {
+      self.scl();
+    } else if opcode == 0x00FD && schip {
+      self.exit();
+    } else if opcode == 0x00FE && schip {
+      self.low();
+    } else if opcode == 0x00FF && schip {
+      self.high();
+    } else if opcode & 0xFFF0 == 0x00B0 && schip {
+      self.scu_nibble(n!(opcode));
+    } else if opcode & 0xFFF0 == 0x00C0 && schip {
+      self.scd_nibble(n!(opcode));
+    } else if opcode & 0xF000 == 0x0000 {
+      self.sys_addr(nnn!(opcode));
+    } else if opcode & 0xF000 == 0x1000 {
+      self.jp_addr(nnn!(opcode));
+    } else if opcode & 0xF000 == 0x2000 {
+      self.call_addr(nnn!(opcode));
+    } else if opcode & 0xF000 == 0x3000 {
+      self.se_vx_byte(x!(opcode), kk!(opcode));
+    } else if opcode & 0xF000 == 0x4000 {
+      self.sne_vx_byte(x!(opcode), kk!(opcode));
+    } else if opcode & 0xF00F == 0x5000 {
+      self.se_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF000 == 0x6000 {
+      self.ld_vx_byte(x!(opcode), kk!(opcode));
+    } else if opcode & 0xF000 == 0x7000 {
+      self.add_vx_byte(x!(opcode), kk!(opcode));
+    } else if opcode & 0xF00F == 0x8000 {
+      self.ld_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF00F == 0x8001 {
+      self.or_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF00F == 0x8002 {
+      self.and_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF00F == 0x8003 {
+      self.xor_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF00F == 0x8004 {
+      self.add_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF00F == 0x8005 {
+      self.sub_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF00F == 0x8006 {
+      self.shr_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF00F == 0x8007 {
+      self.subn_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF00F == 0x800E {
+      self.shl_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF00F == 0x9000 {
+      self.sne_vx_vy(x!(opcode), y!(opcode));
+    } else if opcode & 0xF000 == 0xA000 {
+      self.ld_i_addr(nnn!(opcode));
+    } else if opcode & 0xF000 == 0xB000 {
+      self.jp_v0_addr(nnn!(opcode));
+    } else if opcode & 0xF000 == 0xC000 {
+      self.rnd_vx_byte(x!(opcode), kk!(opcode));
+    } else if opcode & 0xF00F == 0xD000 && schip {
+      self.drw_vx_vy_0(x!(opcode), y!(opcode));
+    } else if opcode & 0xF000 == 0xD000 {
+      self.drw_vx_vy_nibble(x!(opcode), y!(opcode), n!(opcode));
+    } else if opcode & 0xF0FF == 0xE09E {
+      self.skp_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xE0A1 {
+      self.sknp_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF007 {
+      self.ld_vx_dt(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF00A {
+      self.ld_vx_k(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF015 {
+      self.ld_dt_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF018 {
+      self.ld_st_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF01E {
+      self.add_i_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF029 {
+      self.ld_f_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF030 && schip {
+      self.ld_hf_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF033 {
+      self.ld_b_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF055 {
+      self.ld_i_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF065 {
+      self.ld_vx_i(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF075 && schip {
+      self.ld_r_vx(x!(opcode));
+    } else if opcode & 0xF0FF == 0xF085 && schip {
+      self.ld_vx_r(x!(opcode));
+    } else {
+      panic!("Unexpected Opcode: {:#06X}", opcode);
     }
   }
 
@@ -233,17 +290,24 @@ impl Chip8 {
 
   fn reset(&mut self, eti: bool) {
     blankify!(self.reg_v.iter_mut());
+    blankify!(self.reg_u.iter_mut());
     blankify!(self.stack.iter_mut());
     blankify!(self.display.iter_mut());
     blankify!(self.memory.iter_mut());
 
-    self.delay = 0;
-    self.sound = 0;
     self.pc = Self::base(eti) as u16;
     self.sp = 0;
+
+    self.delay = 0;
+    self.sound = 0;
+
     self.reg_i = 0;
+
     self.keys = 0;
     self.wait = null_mut();
+
+    self.render = false;
+    self.pitch = Pitch::P8;
   }
 
   fn read(&self, address: usize) -> u16 {
@@ -398,18 +462,24 @@ impl Chip8 {
   }
 
   // Stores the least significant bit of VX in VF and then shifts VX to the right by 1.
-  fn shr_vx_vy(&mut self, x: u8, _y: u8) { // 8xy6 - SHR Vx {, Vy}
-    // TODO: Shift Vy
-    let source: u8 = self.reg_v[x as usize];
+  fn shr_vx_vy(&mut self, x: u8, y: u8) { // 8xy6 - SHR Vx {, Vy}
+    let source: u8 = if self.is_mode(Mode::SCHIP) {
+      self.reg_v[x as usize]
+    } else {
+      self.reg_v[y as usize]
+    };
 
     self.reg_v[VF] = source & 0x1;
     self.reg_v[x as usize] = source >> 0x1;
   }
 
   // Stores the most significant bit of VX in VF and then shifts VX to the left by 1.
-  fn shl_vx_vy(&mut self, x: u8, _y: u8) { // 8xyE - SHL Vx {, Vy}
-    // TODO: Shift Vy
-    let source: u8 = self.reg_v[x as usize];
+  fn shl_vx_vy(&mut self, x: u8, y: u8) { // 8xyE - SHL Vx {, Vy}
+    let source: u8 = if self.is_mode(Mode::SCHIP) {
+      self.reg_v[x as usize]
+    } else {
+      self.reg_v[y as usize]
+    };
 
     self.reg_v[VF] = source >> 7;
     self.reg_v[x as usize] = source << 0x1;
@@ -430,7 +500,7 @@ impl Chip8 {
     self.reg_v[x as usize] = rand() & kk;
   }
 
-  fn drw_vx_vy_nibble(&mut self, x: u8, y: u8, n: u8) { // Dxyn - DRW Vx, Vy, nibble
+  fn drw_vx_vy_nibble(&mut self, x: u8, y: u8, mut n: u8) { // Dxyn - DRW Vx, Vy, nibble
     let x: usize = self.reg_v[x as usize] as usize;
     let y: usize = self.reg_v[y as usize] as usize;
 
@@ -498,12 +568,23 @@ impl Chip8 {
 
   // Adds VX to I.
   //
-  // TODO
   // VF is set to 1 when there is a range overflow (I + VX > 0xFFF),
   // and to 0 when there isn't. This is an undocumented feature of the
   // CHIP-8 and used by the Spacefight 2091! game.
   fn add_i_vx(&mut self, x: u8) { // Fx1E - ADD I, Vx
-    self.reg_i = self.reg_i.wrapping_add(self.reg_v[x as usize] as u16);
+    if self.is_mode(Mode::SCHIP) {
+      let num: u16 = self.reg_i.wrapping_add(self.reg_v[x as usize] as u16);
+
+      self.reg_v[VF] = if num > 0xFFF {
+        0x1
+      } else {
+        0x0
+      };
+
+      self.reg_i = num;
+    } else {
+      self.reg_i = self.reg_i.wrapping_add(self.reg_v[x as usize] as u16);
+    }
   }
 
   // Sets I to the location of the sprite for the character in VX.
@@ -529,6 +610,10 @@ impl Chip8 {
     let source: RangeToInclusive<usize> = ..=x as usize;
 
     self.memory[output].copy_from_slice(&self.reg_v[source]);
+
+    if self.is_mode(Mode::CHIP) {
+      self.reg_i += x as u16 + 1;
+    }
   }
 
   // Fills V0 to VX (including VX) with values from memory starting at address I.
@@ -538,5 +623,357 @@ impl Chip8 {
     let source: RangeInclusive<usize> = self.reg_i as usize..=self.reg_i as usize + x as usize;
 
     self.reg_v[output].copy_from_slice(&self.memory[source]);
+
+    if self.is_mode(Mode::CHIP) {
+      self.reg_i += x as u16 + 1;
+    }
+  }
+
+  // ===========================================================================
+  // Super Chip-48
+  // ===========================================================================
+
+  // Scroll up N pixels (N/2 pixels in low res mode)
+  fn scu_nibble(&mut self, mut n: u8) { // 00Bn - SCU nibble
+    if self.pitch == Pitch::P8 {
+      n >>= 0x1;
+    }
+
+    let from: usize = n as usize * Self::W;
+    let clear: RangeFrom<usize> = self.display.len() - from..;
+
+    self.display.copy_within(from.., 0);
+
+    for pixel in self.display[clear].iter_mut() {
+      *pixel = 0;
+    }
+
+    self.render = true;
+  }
+
+  // Scroll down N pixels (N/2 pixels in low res mode)
+  fn scd_nibble(&mut self, mut n: u8) { // 00Cn - SCD nibble
+    if self.pitch == Pitch::P8 {
+      n >>= 0x1;
+    }
+
+    let from: usize = n as usize * Self::W;
+    let source: RangeTo<usize> = ..self.display.len() - from;
+
+    self.display.copy_within(source, from);
+
+    for pixel in self.display[..from].iter_mut() {
+      *pixel = 0;
+    }
+
+    self.render = true;
+  }
+
+  // Scroll right 4 pixels (2 pixels in low res mode)
+  fn scr(&mut self) { // 00FB - SCR
+    let pitch: usize = self.pitch as usize;
+    let shift: usize = pitch >> 2;
+
+    for y in 0..Self::H {
+      for x in (0..Self::W).rev() {
+        let index: usize = y * Self::W + x;
+
+        if x > shift {
+          self.display[index] = self.display[index - shift];
+        } else {
+          self.display[index] = 0;
+        }
+      }
+    }
+
+    self.render = true;
+  }
+
+  // Scroll left 4 pixels (2 pixels in low res mode)
+  fn scl(&mut self) { // 00FC - SCL
+    let pitch: usize = self.pitch as usize;
+    let shift: usize = pitch >> 2;
+
+    for y in 0..Self::H {
+      for x in 0..Self::W {
+        let index: usize = y * Self::W + x;
+
+        if x < Self::W - shift {
+          self.display[index] = self.display[index + shift];
+        } else {
+          self.display[index] = 0;
+        }
+      }
+    }
+
+    self.render = true;
+  }
+
+  // Exit the interpreter; this causes the VM to infinite loop
+  fn exit(&mut self) { // 00FD - EXIT
+    self.pc -= 2;
+  }
+
+  // Enter low resolution (64x32) mode; this is the default mode
+  fn low(&mut self) { // 00FE - LOW
+    self.pitch = Pitch::P8;
+  }
+
+  // Enter high resolution (128x64) mode
+  fn high(&mut self) { // 00FF - HIGH
+    self.pitch = Pitch::P16;
+  }
+
+  // Draw a 16x16 sprite at I to VX, VY (8x16 in low res mode)
+  fn drw_vx_vy_0(&mut self, x: u8, y: u8) { // Dxy0 - DRW Vx, Vy, 0
+    self.drw_vx_vy_nibble(x, y, 0);
+  }
+
+  // I = address of 8x10 font character in VX (0..F)
+  fn ld_hf_vx(&mut self, x: u8) { // Fx30 - LD HF, Vx
+    debug_assert!(x < 0xF /* 0xA */, "Fx30 Overflow = {:#03X}", x);
+    self.reg_i = FONT.len() as u16 + (self.reg_v[x as usize] as u16 * 10);
+  }
+
+  // Store V0..VX (inclusive) into HP-RPL user flags R0..RX
+  fn ld_r_vx(&mut self, x: u8) { // Fx75 - LD R, Vx
+    debug_assert!(x < UFLAGS as u8, "Fx75 Overflow = {:#03X}", x);
+    self.reg_u[..=x as usize].copy_from_slice(&self.reg_v[..=x as usize]);
+  }
+
+  // Load V0..VX (inclusive) from HP-RPL user flags R0..RX
+  fn ld_vx_r(&mut self, x: u8) { // Fx85 - LD Vx, R
+    debug_assert!(x < UFLAGS as u8, "Fx85 Overflow = {:#03X}", x);
+    self.reg_v[..=x as usize].copy_from_slice(&self.reg_u[..=x as usize]);
+  }
+}
+
+#[cfg(test)]
+mod tests {
+  use super::*;
+
+  #[test]
+  fn test_cls() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ret() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_scr() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_scl() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_exit() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_low() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_high() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_jp_addr() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_call_addr() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_se_vx_byte() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_sne_vx_byte() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_vx_byte() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_add_vx_byte() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_i_addr() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_jp_v0_addr() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_rnd_vx_byte() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_drw_vx_vy_nibble() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_se_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_or_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_and_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_xor_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_add_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_sub_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_shr_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_subn_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_shl_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_sne_vx_vy() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_drw_vx_vy_0() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_skp_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_sknp_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_vx_dt() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_vx_k() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_dt_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_st_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_add_i_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_f_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_hf_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_b_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_i_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_vx_i() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_r_vx() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_ld_vx_r() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_scu_nibble() {
+    unimplemented!()
+  }
+
+  #[test]
+  fn test_scd_nibble() {
+    unimplemented!()
   }
 }

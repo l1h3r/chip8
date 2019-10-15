@@ -4,6 +4,9 @@ use std::time::SystemTime;
 use std::time::UNIX_EPOCH;
 
 use crate::chip8::Chip8;
+use crate::chip8::Mode;
+use crate::chip8::Pitch;
+use crate::instruction::Instruction;
 use crate::sdl2::Event;
 use crate::sdl2::SDLK_Keycode;
 use crate::sdl2::SDL_Context;
@@ -44,9 +47,8 @@ pub struct ChipRunner {
 }
 
 impl ChipRunner {
-  pub const SCALE: i32 = 10;
-  pub const W: i32 = (Chip8::W as i32 * Self::SCALE) + 320 + PAD3;
-  pub const H: i32 = (Chip8::H as i32 * Self::SCALE) + 320 + PAD3;
+  pub const W: i32 = (Chip8::W as i32 * 5) + 320 + PAD3;
+  pub const H: i32 = (Chip8::H as i32 * 5) + 320 + PAD3;
 
   pub fn new() -> Self {
     Self {
@@ -109,6 +111,11 @@ impl ChipRunner {
     }
   }
 
+  pub fn mode(&mut self, mode: Mode) {
+    self.reset();
+    self.chip8.mode(mode);
+  }
+
   pub fn load(&mut self, path: &str, eti: bool) -> Result<(), &'static str> {
     self.reset();
     self.chip8.load(path, eti)
@@ -163,12 +170,14 @@ impl ChipRunner {
   }
 
   fn render_display(&self, context: &SDL_Context, dx: i32, dy: i32) {
+    let scale: i32 = if self.chip8.pitch == Pitch::P8 { 10 } else { 5 };
+
     for (index, &pixel) in self.chip8.display.iter().enumerate() {
       if pixel == 1 {
-        let x: i32 = dx + ((index % Chip8::W) as i32 * Self::SCALE);
-        let y: i32 = dy + ((index / Chip8::W) as i32 * Self::SCALE);
+        let x: i32 = dx + ((index % Chip8::W) as i32 * scale);
+        let y: i32 = dy + ((index / Chip8::W) as i32 * scale);
 
-        context.renderer.fill_rect(x, y, Self::SCALE, Self::SCALE);
+        context.renderer.fill_rect(x, y, scale, scale);
       }
     }
   }
@@ -207,7 +216,14 @@ impl ChipRunner {
     let mut lines: Lines = Lines::new(context, dx, dy);
 
     for opcode in self.history_window(HISTORY as i32 - 1) {
-      lines.write(&format!("[{:#06X}] {}", opcode, instruction(*opcode)));
+      if let Some(instruction) = Instruction::find(*opcode) {
+        lines.write(&format!(
+          "[{opcode:#06X}] {name: <8} - {desc}",
+          opcode = opcode,
+          name = instruction.name,
+          desc = instruction.desc,
+        ));
+      }
     }
   }
 
@@ -335,52 +351,5 @@ impl<'a, 'b, 'c> Lines<'a, 'b, 'c> {
     }
 
     self.y += 10;
-  }
-}
-
-fn instruction(opcode: u16) -> &'static str {
-  match opcode & 0xFFFF {
-    0x00E0 => "00E0 - CLS",
-    0x00EE => "00EE - RET",
-    _ => match opcode & 0xF000 {
-      0x0000 => "0nnn - SYS addr",
-      0x1000 => "1nnn - JP addr",
-      0x2000 => "2nnn - CALL addr",
-      0x3000 => "3xkk - SE Vx, byte",
-      0x4000 => "4xkk - SNE Vx, byte",
-      0x6000 => "6xkk - LD Vx, byte",
-      0x7000 => "7xkk - ADD Vx, byte",
-      0xA000 => "Annn - LD I, addr",
-      0xB000 => "Bnnn - JP V0, addr",
-      0xC000 => "Cxkk - RND Vx, byte",
-      0xD000 => "Dxyn - DRW Vx, Vy, nibble",
-      _ => match opcode & 0xF00F {
-        0x5000 => "5xy0 - SE Vx, Vy",
-        0x8000 => "8xy0 - LD Vx, Vy",
-        0x8001 => "8xy1 - OR Vx, Vy",
-        0x8002 => "8xy2 - AND Vx, Vy",
-        0x8003 => "8xy3 - XOR Vx, Vy",
-        0x8004 => "8xy4 - ADD Vx, Vy",
-        0x8005 => "8xy5 - SUB Vx, Vy",
-        0x8006 => "8xy6 - SHR Vx {, Vy}",
-        0x8007 => "8xy7 - SUBN Vx, Vy",
-        0x800E => "8xyE - SHL Vx {, Vy}",
-        0x9000 => "9xy0 - SNE Vx, Vy",
-        _ => match opcode & 0xF0FF {
-          0xE09E => "Ex9E - SKP Vx",
-          0xE0A1 => "ExA1 - SKNP Vx",
-          0xF007 => "Fx07 - LD Vx, DT",
-          0xF00A => "Fx0A - LD Vx, K",
-          0xF015 => "Fx15 - LD DT, Vx",
-          0xF018 => "Fx18 - LD ST, Vx",
-          0xF01E => "Fx1E - ADD I, Vx",
-          0xF029 => "Fx29 - LD F, Vx",
-          0xF033 => "Fx33 - LD B, Vx",
-          0xF055 => "Fx55 - LD [I], Vx",
-          0xF065 => "Fx65 - LD Vx, [I]",
-          _ => panic!("Unexpected Opcode: {:#06X}", opcode),
-        },
-      },
-    },
   }
 }

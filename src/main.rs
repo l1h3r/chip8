@@ -5,12 +5,17 @@
 extern crate bitflags;
 extern crate libc;
 
+#[macro_use]
+mod macros;
+
 mod chip8;
+mod instruction;
 mod runner;
 mod sdl2;
 
 use std::env::args;
 
+use crate::chip8::Mode;
 use crate::runner::ChipRunner;
 use crate::sdl2::AudioBell;
 use crate::sdl2::Renderer;
@@ -28,6 +33,7 @@ static FONT_BMP: &'static [u8] = include_bytes!("font.bmp");
 #[repr(C)]
 pub struct Args {
   pub eti: bool,
+  pub mode: Mode,
   pub rom: String,
 }
 
@@ -35,12 +41,15 @@ impl Args {
   pub fn from_env() -> Self {
     let mut data: Self = Self {
       eti: false,
+      mode: Mode::CHIP,
       rom: String::new(),
     };
 
     for arg in args() {
       match arg.as_str() {
         "--eti" => data.eti = true,
+        "--chip" => data.mode = Mode::CHIP,
+        "--schip" => data.mode = Mode::SCHIP,
         _ => data.rom = arg,
       }
     }
@@ -82,6 +91,7 @@ fn main() -> Result<(), &'static str> {
 
   let mut runner: ChipRunner = ChipRunner::new();
 
+  runner.mode(args.mode);
   runner.load(&args.rom, args.eti)?;
   runner.run(&context);
 
