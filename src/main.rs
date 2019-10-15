@@ -1,31 +1,16 @@
-#![allow(bare_trait_objects)]
-#![feature(cell_update, rustc_private)]
-
-#[macro_use]
-extern crate bitflags;
-extern crate libc;
-
-#[macro_use]
-mod macros;
-
-mod chip8;
-mod instruction;
-mod runner;
-mod sdl2;
-
 use std::env::args;
 
-use crate::chip8::Mode;
-use crate::runner::ChipRunner;
-use crate::sdl2::AudioBell;
-use crate::sdl2::Renderer;
-use crate::sdl2::RendererFlags;
-use crate::sdl2::SDLToken;
-use crate::sdl2::SDL_Context;
-use crate::sdl2::Surface;
-use crate::sdl2::Texture;
-use crate::sdl2::Window;
-use crate::sdl2::WindowFlags;
+use chip::AudioBell;
+use chip::ChipRunner;
+use chip::Mode;
+use chip::Renderer;
+use chip::RendererFlags;
+use chip::SDLToken;
+use chip::SDL_Context;
+use chip::Surface;
+use chip::Texture;
+use chip::Window;
+use chip::WindowFlags;
 
 static FONT_BMP: &'static [u8] = include_bytes!("font.bmp");
 

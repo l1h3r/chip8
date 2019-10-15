@@ -575,11 +575,7 @@ impl Chip8 {
     if self.is_mode(Mode::SCHIP) {
       let num: u16 = self.reg_i.wrapping_add(self.reg_v[x as usize] as u16);
 
-      self.reg_v[VF] = if num > 0xFFF {
-        0x1
-      } else {
-        0x0
-      };
+      self.reg_v[VF] = if num > 0xFFF { 0x1 } else { 0x0 };
 
       self.reg_i = num;
     } else {
