@@ -158,6 +158,7 @@ impl Chip8 {
     None
   }
 
+  #[allow(clippy::cognitive_complexity)]
   pub fn exec(&mut self, opcode: u16) {
     let schip: bool = self.is_mode(Mode::SCHIP);
 
@@ -481,7 +482,7 @@ impl Chip8 {
       self.reg_v[y as usize]
     };
 
-    self.reg_v[VF] = source >> 7;
+    self.reg_v[VF] = source >> 0x7;
     self.reg_v[x as usize] = source << 0x1;
   }
 
@@ -530,14 +531,14 @@ impl Chip8 {
   // Skips the next instruction if the key stored in VX is pressed.
   fn skp_vx(&mut self, x: u8) { // Ex9E - SKP Vx
     if self.key_pressed(self.reg_v[x as usize]) {
-      self.pc += 2;
+      self.pc += 0x2;
     }
   }
 
   // Skips the next instruction if the key stored in VX isn't pressed.
   fn sknp_vx(&mut self, x: u8) { // ExA1 - SKNP Vx
     if !self.key_pressed(self.reg_v[x as usize]) {
-      self.pc += 2;
+      self.pc += 0x2;
     }
   }
 
@@ -576,7 +577,6 @@ impl Chip8 {
       let num: u16 = self.reg_i.wrapping_add(self.reg_v[x as usize] as u16);
 
       self.reg_v[VF] = if num > 0xFFF { 0x1 } else { 0x0 };
-
       self.reg_i = num;
     } else {
       self.reg_i = self.reg_i.wrapping_add(self.reg_v[x as usize] as u16);
@@ -585,7 +585,7 @@ impl Chip8 {
 
   // Sets I to the location of the sprite for the character in VX.
   fn ld_f_vx(&mut self, x: u8) { // Fx29 - LD F, Vx
-    self.reg_i = self.reg_v[x as usize] as u16 * 5;
+    self.reg_i = self.reg_v[x as usize] as u16 * 0x5;
   }
 
   // Stores the binary-coded decimal representation of VX,
@@ -594,9 +594,9 @@ impl Chip8 {
   fn ld_b_vx(&mut self, x: u8) { // Fx33 - LD B, Vx
     let rx: u8 = self.reg_v[x as usize];
 
-    self.memory[self.reg_i as usize] = rx / 100;
-    self.memory[self.reg_i as usize + 1] = (rx / 10) % 10;
-    self.memory[self.reg_i as usize + 2] = (rx % 100) % 10;
+    self.memory[self.reg_i as usize] = rx / 0x64;
+    self.memory[self.reg_i as usize + 0x1] = (rx / 0xA) % 0xA;
+    self.memory[self.reg_i as usize + 0x2] = (rx % 0x64) % 0xA;
   }
 
   // Stores V0 to VX (including VX) in memory starting at address I.
@@ -608,7 +608,7 @@ impl Chip8 {
     self.memory[output].copy_from_slice(&self.reg_v[source]);
 
     if self.is_mode(Mode::CHIP) {
-      self.reg_i += x as u16 + 1;
+      self.reg_i += x as u16 + 0x1;
     }
   }
 
@@ -621,7 +621,7 @@ impl Chip8 {
     self.reg_v[output].copy_from_slice(&self.memory[source]);
 
     if self.is_mode(Mode::CHIP) {
-      self.reg_i += x as u16 + 1;
+      self.reg_i += x as u16 + 0x1;
     }
   }
 
@@ -638,10 +638,10 @@ impl Chip8 {
     let from: usize = n as usize * Self::W;
     let clear: RangeFrom<usize> = self.display.len() - from..;
 
-    self.display.copy_within(from.., 0);
+    self.display.copy_within(from.., 0x0);
 
     for pixel in self.display[clear].iter_mut() {
-      *pixel = 0;
+      *pixel = 0x0;
     }
 
     self.render = true;
@@ -659,7 +659,7 @@ impl Chip8 {
     self.display.copy_within(source, from);
 
     for pixel in self.display[..from].iter_mut() {
-      *pixel = 0;
+      *pixel = 0x0;
     }
 
     self.render = true;
@@ -670,14 +670,14 @@ impl Chip8 {
     let pitch: usize = self.pitch as usize;
     let shift: usize = pitch >> 2;
 
-    for y in 0..Self::H {
-      for x in (0..Self::W).rev() {
+    for y in 0x0..Self::H {
+      for x in (0x0..Self::W).rev() {
         let index: usize = y * Self::W + x;
 
         if x > shift {
           self.display[index] = self.display[index - shift];
         } else {
-          self.display[index] = 0;
+          self.display[index] = 0x0;
         }
       }
     }
@@ -690,14 +690,14 @@ impl Chip8 {
     let pitch: usize = self.pitch as usize;
     let shift: usize = pitch >> 2;
 
-    for y in 0..Self::H {
-      for x in 0..Self::W {
+    for y in 0x0..Self::H {
+      for x in 0x0..Self::W {
         let index: usize = y * Self::W + x;
 
         if x < Self::W - shift {
           self.display[index] = self.display[index + shift];
         } else {
-          self.display[index] = 0;
+          self.display[index] = 0x0;
         }
       }
     }
@@ -707,7 +707,7 @@ impl Chip8 {
 
   // Exit the interpreter; this causes the VM to infinite loop
   fn exit(&mut self) { // 00FD - EXIT
-    self.pc -= 2;
+    self.pc -= 0x2;
   }
 
   // Enter low resolution (64x32) mode; this is the default mode
@@ -722,13 +722,13 @@ impl Chip8 {
 
   // Draw a 16x16 sprite at I to VX, VY (8x16 in low res mode)
   fn drw_vx_vy_0(&mut self, x: u8, y: u8) { // Dxy0 - DRW Vx, Vy, 0
-    self.drw_vx_vy_nibble(x, y, 0);
+    self.drw_vx_vy_nibble(x, y, 0x0);
   }
 
   // I = address of 8x10 font character in VX (0..F)
   fn ld_hf_vx(&mut self, x: u8) { // Fx30 - LD HF, Vx
     debug_assert!(x < 0xF /* 0xA */, "Fx30 Overflow = {:#03X}", x);
-    self.reg_i = FONT.len() as u16 + (self.reg_v[x as usize] as u16 * 10);
+    self.reg_i = FONT.len() as u16 + (self.reg_v[x as usize] as u16 * 0xA);
   }
 
   // Store V0..VX (inclusive) into HP-RPL user flags R0..RX
@@ -741,6 +741,12 @@ impl Chip8 {
   fn ld_vx_r(&mut self, x: u8) { // Fx85 - LD Vx, R
     debug_assert!(x < UFLAGS as u8, "Fx85 Overflow = {:#03X}", x);
     self.reg_v[..=x as usize].copy_from_slice(&self.reg_u[..=x as usize]);
+  }
+}
+
+impl Default for Chip8 {
+  fn default() -> Self {
+    Self::new()
   }
 }
 

@@ -307,6 +307,12 @@ impl ChipRunner {
   }
 }
 
+impl Default for ChipRunner {
+  fn default() -> Self {
+    Self::new()
+  }
+}
+
 fn render_text(context: &SDL_Context, text: &str, x: i32, y: i32) {
   let mut source: SDL_Rect = SDL_Rect {
     x: 0,

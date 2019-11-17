@@ -13,7 +13,7 @@ impl<'a> Instruction<'a> {
   }
 }
 
-const INSTRUCTIONS: &'static [Instruction] = &[
+const INSTRUCTIONS: &[Instruction] = &[
   Instruction {
     code: 0x00E0,
     mask: 0xFFFF,

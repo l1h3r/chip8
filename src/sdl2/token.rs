@@ -62,10 +62,10 @@ impl SDLToken {
     }
   }
 
-  pub fn open_audio_device(&self, mut spec: SDL_AudioSpec) -> Result<AudioDevice, &'static str> {
+  pub fn open_audio_device(&self, spec: SDL_AudioSpec) -> Result<AudioDevice, &'static str> {
     unsafe {
       if SDL_GetNumAudioDevices(0) == 0 {
-        Err("No Audio Device Available")?
+        return Err("No Audio Device Available");
       }
     }
 
@@ -81,11 +81,9 @@ impl SDLToken {
       userdata: null_mut(),
     };
 
-    let device: u32 = unsafe { SDL_OpenAudioDevice(null(), 0, &mut spec, &mut obtained, 0) };
+    let device: u32 = unsafe { SDL_OpenAudioDevice(null(), 0, &spec, &mut obtained, 0) };
 
-    if device == 0 {
-      Err(error())
-    } else if spec.format != obtained.format {
+    if device == 0 || spec.format != obtained.format {
       Err(error())
     } else {
       Ok(AudioDevice::new(device))

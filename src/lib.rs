@@ -1,4 +1,8 @@
-#![allow(bare_trait_objects)]
+#![allow(
+  bare_trait_objects,
+  clippy::unreadable_literal,
+  clippy::missing_safety_doc
+)]
 #![feature(cell_update, rustc_private)]
 
 #[macro_use]

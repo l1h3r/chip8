@@ -11,7 +11,7 @@ extern crate chip;
 use chip::Instruction;
 
 fn main() -> Result<(), Error> {
-  let path: String = args().skip(1).next().unwrap_or_default();
+  let path: String = args().nth(1).unwrap_or_default();
   let buffer: Vec<u8> = read(&path)?;
 
   let file: File = File::create("out.asm")?;

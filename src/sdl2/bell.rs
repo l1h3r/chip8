@@ -2,6 +2,7 @@ use core::fmt::Debug;
 use core::fmt::Formatter;
 use core::fmt::Result as FResult;
 use core::marker::PhantomData;
+use core::ptr::null_mut;
 
 use crate::sdl2::AudioDevice;
 use crate::sdl2::SDLToken;
@@ -29,13 +30,13 @@ impl<'a> AudioBell<'a> {
       padding: 0,
       size: 0,
       callback: None,
-      userdata: 0 as *mut _,
+      userdata: null_mut(),
     })?;
 
     let mut buffer: [i8; SAMPLES] = [0; SAMPLES];
 
-    for index in 0..SAMPLES {
-      buffer[index] = if index % 100 < 50 { 25 } else { -25 };
+    for (index, byte) in buffer.iter_mut().enumerate() {
+      *byte = if index % 100 < 50 { 25 } else { -25 };
     }
 
     Ok(Self {

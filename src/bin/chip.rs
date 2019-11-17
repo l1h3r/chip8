@@ -12,7 +12,7 @@ use chip::Texture;
 use chip::Window;
 use chip::WindowFlags;
 
-static FONT_BMP: &'static [u8] = include_bytes!("font.bmp");
+static FONT_BMP: &[u8] = include_bytes!("font.bmp");
 
 #[derive(Debug)]
 #[repr(C)]
